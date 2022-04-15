@@ -176,6 +176,7 @@ namespace Streamish.Repositories
                                     Message = DbUtils.GetString(reader, "Message"),
                                     VideoId = videoId,
                                     UserProfileId = DbUtils.GetInt(reader, "CommentUserProfileId")
+                                    
                                 });
                             }
                         }
@@ -194,15 +195,12 @@ namespace Streamish.Repositories
                 using (var cmd = conn.CreateCommand())
                 {
                     cmd.CommandText = @"
-                        SELECT v.Id AS VideoId, v.Title, v.Description, v.Url, 
-                            v.DateCreated AS VideoDateCreated, v.UserProfileId As VideoUserProfileId,
-                            up.Name, up.Email, up.DateCreated AS UserProfileDateCreated,
-                            up.ImageUrl AS UserProfileImageUrl,                       
-                            c.Id AS CommentId, c.Message, c.UserProfileId AS CommentUserProfileId
+                        SELECT v.*, up.Id as UserId, up.Name, up. Email, up.DateCreated as UserProfileDateCreated, 
+                                up.ImageUrl, c.Id as CommentId, c.Message, c.VideoId, c.UserProfileId as CommentUserProfileId
                        FROM Video v 
                        JOIN UserProfile up ON v.UserProfileId = up.Id
                        LEFT JOIN Comment c on c.VideoId = v.id
-                       WHERE VideoId = @Id
+                       WHERE v.Id = @Id
                        
                         ";
                     DbUtils.AddParameter(cmd, "@Id", id);
@@ -213,7 +211,7 @@ namespace Streamish.Repositories
                         Video video = null;
                         while (reader.Read())
                         {
-                            var videoId = DbUtils.GetInt(reader, "VideoId");
+                            var videoId = DbUtils.GetInt(reader, "Id");
                             if (video == null)
                             {
                                 video = new Video()
@@ -221,16 +219,16 @@ namespace Streamish.Repositories
                                     Id = videoId,
                                     Title = DbUtils.GetString(reader, "Title"),
                                     Description = DbUtils.GetString(reader, "Description"),
-                                    DateCreated = DbUtils.GetDateTime(reader, "VideoDateCreated"),
+                                    DateCreated = DbUtils.GetDateTime(reader, "DateCreated"),
                                     Url = DbUtils.GetString(reader, "Url"),
-                                    UserProfileId = DbUtils.GetInt(reader, "VideoUserProfileId"),
+                                    UserProfileId = DbUtils.GetInt(reader, "UserProfileId"),
                                     UserProfile = new UserProfile()
                                     {
-                                        Id = DbUtils.GetInt(reader, "VideoUserProfileId"),
+                                        Id = DbUtils.GetInt(reader, "UserId"),
                                         Name = DbUtils.GetString(reader, "Name"),
                                         Email = DbUtils.GetString(reader, "Email"),
                                         DateCreated = DbUtils.GetDateTime(reader, "UserProfileDateCreated"),
-                                        ImageUrl = DbUtils.GetString(reader, "UserProfileImageUrl"),
+                                        ImageUrl = DbUtils.GetString(reader, "ImageUrl"),
                                     },
                                     Comments = new List<Comment>()
                                 };
@@ -253,6 +251,67 @@ namespace Streamish.Repositories
                 }
             }
         }
+
+        public List<Video> Search(string criterion, bool sortDescending)
+        {
+            using (var conn = Connection)
+            {
+                conn.Open();
+                using (var cmd = conn.CreateCommand())
+                {
+                    var sql = @"
+              SELECT v.Id, v.Title, v.Description, v.Url, v.DateCreated AS VideoDateCreated, v.UserProfileId,
+
+                     up.Name, up.Email, up.DateCreated AS UserProfileDateCreated,
+                     up.ImageUrl AS UserProfileImageUrl
+                        
+                FROM Video v 
+                     JOIN UserProfile up ON v.UserProfileId = up.Id
+               WHERE v.Title LIKE @Criterion OR v.Description LIKE @Criterion";
+
+                    if (sortDescending)
+                    {
+                        sql += " ORDER BY v.DateCreated DESC";
+                    }
+                    else
+                    {
+                        sql += " ORDER BY v.DateCreated";
+                    }
+
+                    cmd.CommandText = sql;
+                    DbUtils.AddParameter(cmd, "@Criterion", $"%{criterion}%");
+                    using (SqlDataReader reader = cmd.ExecuteReader())
+                    {
+
+                        var videos = new List<Video>();
+                        while (reader.Read())
+                        {
+                            videos.Add(new Video()
+                            {
+                                Id = DbUtils.GetInt(reader, "Id"),
+                                Title = DbUtils.GetString(reader, "Title"),
+                                Description = DbUtils.GetString(reader, "Description"),
+                                DateCreated = DbUtils.GetDateTime(reader, "VideoDateCreated"),
+                                Url = DbUtils.GetString(reader, "Url"),
+                                UserProfileId = DbUtils.GetInt(reader, "UserProfileId"),
+                                UserProfile = new UserProfile()
+                                {
+                                    Id = DbUtils.GetInt(reader, "UserProfileId"),
+                                    Name = DbUtils.GetString(reader, "Name"),
+                                    Email = DbUtils.GetString(reader, "Email"),
+                                    DateCreated = DbUtils.GetDateTime(reader, "UserProfileDateCreated"),
+                                    ImageUrl = DbUtils.GetString(reader, "UserProfileImageUrl"),
+                                },
+                            });
+                        }
+
+                        return videos;
+                    }
+                }
+            }
+        }
+
+
         public void Add(Video video)
         {
             using (var conn = Connection)
